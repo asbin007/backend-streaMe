@@ -21,7 +21,9 @@ app.use(cors({
         'https://veloratv-clone.vercel.app',
         'https://strememe.vercel.app',
         'https://streme-me.vercel.app',
-        'https://streme-me-git-main-asbin007s-projects.vercel.app'
+        'https://streme-me-git-main-asbin007s-projects.vercel.app',
+        'https://asbin.site',
+        'https://www.asbin.site'
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
