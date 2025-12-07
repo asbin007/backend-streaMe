@@ -1,7 +1,7 @@
-import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
+import { Resend } from 'resend';
+import config from '../config/config';
 
-dotenv.config();
+const resend = new Resend(config.resend_api_key as string);
 
 interface MailOptions {
   to: string;
@@ -12,28 +12,23 @@ interface MailOptions {
 
 const sendMail = async (options: MailOptions): Promise<boolean> => {
   try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // true for 465, false for other ports
-      auth: {
-        user: process.env.EMAIL,
-        pass: process.env.PASSWORD,
-      },
-    });
-
-    const mailOptions = {
-      from: process.env.EMAIL,
+    const { data, error } = await resend.emails.send({
+      from: 'stream me <onboarding@resend.dev>',
       to: options.to,
       subject: options.subject,
       text: options.text,
       html: options.html,
-    };
+    });
 
-    await transporter.sendMail(mailOptions);
+    if (error) {
+      console.error('Error sending email with Resend:', error);
+      return false;
+    }
+
+    console.log('Email sent successfully:', data);
     return true;
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('Unexpected error sending email:', error);
     return false;
   }
 };
