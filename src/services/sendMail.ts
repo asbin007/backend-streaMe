@@ -12,8 +12,8 @@ const sendMail = async (options: MailOptions): Promise<boolean> => {
   try {
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // true for 465, false for other ports
+      port: 465,
+      secure: true, // true for 465, false for other ports
       auth: {
         user: config.email,
         pass: config.password,
@@ -21,7 +21,7 @@ const sendMail = async (options: MailOptions): Promise<boolean> => {
     });
 
     const info = await transporter.sendMail({
-      from: `"VeloraTV" <${config.email}>`,
+      from: `"stream me " <${config.email}>`,
       to: options.to,
       subject: options.subject,
       text: options.text,
