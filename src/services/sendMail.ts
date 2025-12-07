@@ -1,7 +1,5 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import config from '../config/config';
-
-const resend = new Resend(config.resend_api_key as string);
 
 interface MailOptions {
   to: string;
@@ -12,23 +10,28 @@ interface MailOptions {
 
 const sendMail = async (options: MailOptions): Promise<boolean> => {
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'stream me <onboarding@resend.dev>',
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: config.email,
+        pass: config.password,
+      },
+    });
+
+    const info = await transporter.sendMail({
+      from: `"VeloraTV" <${config.email}>`,
       to: options.to,
       subject: options.subject,
       text: options.text,
       html: options.html,
     });
 
-    if (error) {
-      console.error('Error sending email with Resend:', error);
-      return false;
-    }
-
-    console.log('Email sent successfully:', data);
+    console.log('Email sent successfully:', info.messageId);
     return true;
   } catch (error) {
-    console.error('Unexpected error sending email:', error);
+    console.error('Error sending email with Nodemailer:', error);
     return false;
   }
 };
