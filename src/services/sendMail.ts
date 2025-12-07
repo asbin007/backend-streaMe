@@ -13,7 +13,9 @@ interface MailOptions {
 const sendMail = async (options: MailOptions): Promise<boolean> => {
   try {
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false, // true for 465, false for other ports
       auth: {
         user: process.env.EMAIL,
         pass: process.env.PASSWORD,
