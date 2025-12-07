@@ -17,6 +17,7 @@ app.use(cors({
     origin: [
         process.env.CLIENT_URL || 'http://localhost:5173', 
         'http://localhost:5173',
+        'https://www.asbin.site',
         'http://127.0.0.1:5173',
         'https://veloratv-clone.vercel.app',
         'https://strememe.vercel.app',
