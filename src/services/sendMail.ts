@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import config from '../config/config';
 
 interface MailOptions {
@@ -8,30 +8,22 @@ interface MailOptions {
   html?: string;
 }
 
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 const sendMail = async (options: MailOptions): Promise<boolean> => {
   try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true, // true for 465, false for other ports
-      auth: {
-        user: config.email,
-        pass: config.password,
-      },
-    });
-
-    const info = await transporter.sendMail({
-      from: `"stream me " <${config.email}>`,
+    const response = await resend.emails.send({
+      from: "Stream Me <noreply@yourdomain.com>", // IMPORTANT
       to: options.to,
       subject: options.subject,
       text: options.text,
       html: options.html,
     });
 
-    console.log('Email sent successfully:', info.messageId);
+    console.log("Email sent:", response);
     return true;
   } catch (error) {
-    console.error('Error sending email with Nodemailer:', error);
+    console.error("Resend email error:", error);
     return false;
   }
 };
