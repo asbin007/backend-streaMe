@@ -1,0 +1,17 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const tmdbController_1 = require("../controllers/tmdbController");
+const router = (0, express_1.Router)();
+router.get('/trending/:mediaType/:timeWindow', tmdbController_1.TmdbController.getTrending);
+router.get('/:mediaType/popular', tmdbController_1.TmdbController.getPopular);
+router.get('/:mediaType/top_rated', tmdbController_1.TmdbController.getTopRated);
+router.get('/search/multi', tmdbController_1.TmdbController.searchMulti);
+router.get('/:mediaType/:id', tmdbController_1.TmdbController.getDetails);
+router.get('/:mediaType/:id/similar', tmdbController_1.TmdbController.getSimilar);
+router.get('/:mediaType/:id/videos', tmdbController_1.TmdbController.getVideos);
+router.get('/genre/:mediaType/list', tmdbController_1.TmdbController.getGenres);
+router.get('/contents/:mediaType', tmdbController_1.TmdbController.getContents);
+router.get('/discover/:mediaType', tmdbController_1.TmdbController.discover);
+router.get('/tv/:tvId/season/:seasonNumber', tmdbController_1.TmdbController.getSeasonDetails);
+exports.default = router;
