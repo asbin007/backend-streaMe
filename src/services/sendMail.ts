@@ -1,4 +1,5 @@
-import { Resend } from 'resend';
+import FormData from 'form-data';
+import Mailgun from 'mailgun.js';
 import config from '../config/config';
 
 interface MailOptions {
@@ -8,22 +9,28 @@ interface MailOptions {
   html?: string;
 }
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const mailgun = new Mailgun(FormData);
+const mg = mailgun.client({
+  username: 'api',
+  key: config.mailgun_api_key ? config.mailgun_api_key.trim() : '',
+});
 
 const sendMail = async (options: MailOptions): Promise<boolean> => {
   try {
-    const response = await resend.emails.send({
-      from: "Stream Me <noreply@yourdomain.com>", // IMPORTANT
-      to: options.to,
+    const domain = config.mailgun_domain ? config.mailgun_domain.trim() : '';
+    
+    const data = await mg.messages.create(domain, {
+      from: `VeloraTV <postmaster@${domain}>`,
+      to: [options.to],
       subject: options.subject,
       text: options.text,
       html: options.html,
     });
 
-    console.log("Email sent:", response);
+    console.log("Email sent:", data);
     return true;
   } catch (error) {
-    console.error("Resend email error:", error);
+    console.error("Mailgun email error:", error);
     return false;
   }
 };

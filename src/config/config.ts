@@ -10,6 +10,10 @@ export default {
     jwt_expire_in: process.env.JWT_EXPIRE_IN,
     email: process.env.EMAIL,
     password: process.env.PASSWORD,
-    resend_api_key: process.env.RESEND_API_KEY,
-    resend_from: process.env.RESEND_FROM,
+    mailgun_api_key: process.env.MAILGUN_API_KEY,
+    mailgun_domain: process.env.MAILGUN_DOMAIN,
+    mailgun_username: process.env.MAILGUN_USERNAME,
+    google_client_id: process.env.CLIENT_ID,
+    google_client_secret: process.env.CLIENT_SECRET_KEY,
+    base_url: process.env.BASE_URL || 'http://localhost:5000',
 }

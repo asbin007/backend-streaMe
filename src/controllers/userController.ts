@@ -134,6 +134,7 @@ export class UserController {
           username: user.username,
           email: user.email,
           role: user.role,
+          avatarUrl: user.avatarUrl,
           isVerified: user.isVerified,
         },
       });
@@ -243,6 +244,7 @@ export class UserController {
           username: user.username,
           email: user.email,
           role: user.role,
+          avatarUrl: user.avatarUrl,
         },
       });
     } catch (error) {
@@ -442,6 +444,24 @@ export class UserController {
       res.status(200).json({ data: recents });
     } catch (error) {
       res.status(500).json({ message: "Server error" });
+    }
+  }
+  static async googleCallback(req: Request, res: Response): Promise<void> {
+    try {
+      const user = req.user as any;
+      
+      const token = jwt.sign(
+        { id: user.id, role: user.role, avatarUrl: user.avatarUrl },
+        process.env.WT_SECRET_KEY as Secret,
+        { expiresIn: process.env.JWT_EXPIRE_IN || '24h' } as any
+      );
+
+      // Redirect to frontend with token
+      const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+      res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
+    } catch (error) {
+      console.error('Google callback error:', error);
+      res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=auth_failed`);
     }
   }
 }

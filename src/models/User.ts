@@ -31,9 +31,22 @@ export class User extends Model {
 
   @Column({
     type: DataType.STRING,
-    allowNull: false,
+    allowNull: true,
   })
   password!: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+    unique: true,
+  })
+  googleId!: string;
+
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+  })
+  avatarUrl!: string;
 
   @Column({
     type: DataType.ENUM('user', 'admin', 'super_admin'),

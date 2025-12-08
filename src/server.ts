@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
+import passport from 'passport';
+import './config/passport';
 import sequelize from './config/database';
 
 dotenv.config();
@@ -13,6 +15,7 @@ const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(passport.initialize());
 app.use(cors({
     origin: [
         process.env.CLIENT_URL || 'http://localhost:5173', 
