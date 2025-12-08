@@ -141,5 +141,21 @@ export const tmdbService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  getSeasonal: async (mediaType: string) => {
+    try {
+      // Christmas movies query
+      const response = await tmdbApi.get(`/discover/${mediaType}`, {
+        params: {
+          with_keywords: '207317', // 'christmas' keyword ID
+          sort_by: 'popularity.desc',
+          page: 1
+        }
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };

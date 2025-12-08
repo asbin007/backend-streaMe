@@ -122,4 +122,14 @@ export class TmdbController {
       res.status(500).json({ message: 'Error fetching contents', error: error.message });
     }
   }
+
+  static async getSeasonal(req: Request, res: Response): Promise<void> {
+    try {
+      const { mediaType } = req.params;
+      const data = await tmdbService.getSeasonal(mediaType);
+      res.status(200).json(data);
+    } catch (error: any) {
+      res.status(500).json({ message: 'Error fetching seasonal content', error: error.message });
+    }
+  }
 }
