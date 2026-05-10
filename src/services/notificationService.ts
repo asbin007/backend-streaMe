@@ -130,6 +130,75 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Send a notification to specific users only (via FCM and Gmail).
+   */
+  static async sendTargetedNotification(userIds: string[], emails: string[], title: string, body: string, data?: any) {
+    // 1. Send via Gmail
+    if (emails && emails.length > 0) {
+      try {
+        const mailOptions = {
+          from: `"StreaMe Updates" <${config.email}>`,
+          bcc: emails,
+          subject: title,
+          html: `
+            <div style="font-family: sans-serif; padding: 20px; line-height: 1.6; color: #333;">
+              <h2 style="color: #e50914;">${title}</h2>
+              <p style="font-size: 16px;">${body}</p>
+              <br/>
+              <p>
+                <a href="${config.base_url}" style="background-color: #e50914; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                  Watch Now on StreaMe
+                </a>
+              </p>
+            </div>
+          `,
+        };
+        
+        transporter.sendMail(mailOptions).catch(err => {
+          console.error('Error sending targeted Gmail notification:', err);
+        });
+      } catch (error) {
+        console.error('Error with targeted Gmail logic:', error);
+      }
+    }
+
+    // 2. Send via Firebase Cloud Messaging
+    if (!isInitialized) return;
+
+    if (userIds && userIds.length > 0) {
+      try {
+        const pushTokens = await PushToken.findAll({
+          where: { userId: userIds }
+        });
+        const tokens = pushTokens.map(pt => pt.token).filter(token => !!token);
+
+        if (tokens.length === 0) return;
+
+        const message: admin.messaging.MulticastMessage = {
+          notification: { title, body },
+          data: data || {},
+          tokens: tokens,
+        };
+
+        const response = await admin.messaging().sendEachForMulticast(message);
+        
+        if (response.failureCount > 0) {
+          const failedTokens: string[] = [];
+          response.responses.forEach((resp, idx) => {
+            if (!resp.success) failedTokens.push(tokens[idx]);
+          });
+          
+          if (failedTokens.length > 0) {
+            await PushToken.destroy({ where: { token: failedTokens } });
+          }
+        }
+      } catch (error) {
+        console.error('Error sending targeted push notification:', error);
+      }
+    }
+  }
+
   // Pre-defined notification templates
   static async notifyNewMovieAdded(movieTitle: string, movieId: string) {
     return this.broadcastNotification(

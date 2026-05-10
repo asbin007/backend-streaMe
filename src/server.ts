@@ -72,6 +72,7 @@ import authRoutes from './routes/authRoutes';
 import contentRoutes from './routes/contentRoutes';
 import tmdbRoutes from './routes/tmdbRoutes';
 import streamRoutes from './routes/stream.route';
+import { startCronJobs } from './services/cronJobs';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/content', contentRoutes);
@@ -87,6 +88,10 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('Database connected successfully.');
     await sequelize.sync({ alter: true }); 
+    
+    // Start background scheduled tasks
+    startCronJobs();
+
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
