@@ -25,4 +25,16 @@ router.post('/history', authenticateToken, UserController.addToHistory);
 router.get('/history', authenticateToken, UserController.getHistory);
 router.get('/recents', authenticateToken, UserController.getRecents);
 
+// User retention lists
+router.get('/watchlist', authenticateToken, UserController.getWatchlist);
+router.post('/watchlist', authenticateToken, UserController.addToWatchlist);
+router.delete('/watchlist/:mediaType/:mediaId', authenticateToken, UserController.removeFromWatchlist);
+router.get('/favorites', authenticateToken, UserController.getFavorites);
+router.post('/favorites', authenticateToken, UserController.addToFavorites);
+router.delete('/favorites/:mediaType/:mediaId', authenticateToken, UserController.removeFromFavorites);
+
+// Push Token routes
+router.post('/push-token', authenticateToken, UserController.addPushToken);
+router.delete('/push-token', authenticateToken, UserController.removePushToken);
+
 export default router;

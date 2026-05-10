@@ -2,12 +2,19 @@ import { Request, Response } from 'express';
 import { Movie } from '../models/Movie';
 import { Series } from '../models/Series';
 import { Episode } from '../models/Episode';
+import { NotificationService } from '../services/notificationService';
 
 export class ContentController {
   // --- Movies ---
   static async createMovie(req: Request, res: Response): Promise<void> {
     try {
       const movie = await Movie.create(req.body);
+
+      // Trigger "New Movie Added" notification globally
+      if (movie.title && movie.id) {
+        NotificationService.notifyNewMovieAdded(movie.title, movie.id);
+      }
+
       res.status(201).json(movie);
     } catch (error) {
       res.status(500).json({ message: 'Error creating movie', error });
@@ -134,6 +141,17 @@ export class ContentController {
   static async addEpisode(req: Request, res: Response): Promise<void> {
     try {
       const episode = await Episode.create(req.body);
+      
+      // Optionally find the series title if we want it in the notification
+      const series = await Series.findByPk(episode.seriesId);
+      if (series && episode.episodeNumber) {
+        NotificationService.notifyNewEpisodeReleased(
+          series.title, 
+          episode.episodeNumber, 
+          series.id
+        );
+      }
+
       res.status(201).json(episode);
     } catch (error) {
       res.status(500).json({ message: 'Error adding episode', error });

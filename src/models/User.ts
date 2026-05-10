@@ -1,5 +1,7 @@
 import { Table, Column, Model, DataType, CreatedAt, UpdatedAt, HasMany } from 'sequelize-typescript';
 import { WatchHistory } from './WatchHistory';
+import { UserListItem } from './UserListItem';
+import { PushToken } from './PushToken';
 
 @Table({
   tableName: 'users',
@@ -80,4 +82,10 @@ export class User extends Model {
 
   @HasMany(() => WatchHistory)
   watchHistory!: WatchHistory[];
+
+  @HasMany(() => UserListItem)
+  listItems!: UserListItem[];
+
+  @HasMany(() => PushToken)
+  pushTokens!: PushToken[];
 }

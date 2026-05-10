@@ -5,6 +5,8 @@ import otpGenerator from 'otp-generator';
 import { Op } from 'sequelize';
 import { User } from '../models/User';
 import { WatchHistory } from '../models/WatchHistory';
+import { UserListItem } from '../models/UserListItem';
+import { PushToken } from '../models/PushToken';
 import sendMail from '../services/sendMail';
 import checkOtpExpiration from '../services/otpExpiration';
 
@@ -446,6 +448,103 @@ export class UserController {
       res.status(500).json({ message: "Server error" });
     }
   }
+
+  private static async getList(req: Request, res: Response, listType: 'watchlist' | 'favorite'): Promise<void> {
+    try {
+      const userId = (req as any).user.id;
+      const items = await UserListItem.findAll({
+        where: { userId, listType },
+        order: [['createdAt', 'DESC']],
+        limit: 100
+      });
+
+      res.status(200).json({ data: items });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+
+  private static async addToList(req: Request, res: Response, listType: 'watchlist' | 'favorite'): Promise<void> {
+    try {
+      const { mediaId, mediaType, title, posterPath } = req.body;
+      const userId = (req as any).user.id;
+
+      if (!mediaId || !mediaType || !title) {
+        res.status(400).json({ message: "Media ID, media type, and title are required" });
+        return;
+      }
+
+      const [item, created] = await UserListItem.findOrCreate({
+        where: { userId, listType, mediaId, mediaType },
+        defaults: {
+          userId,
+          listType,
+          mediaId,
+          mediaType,
+          title,
+          posterPath: posterPath || ''
+        }
+      });
+
+      if (!created) {
+        item.title = title;
+        item.posterPath = posterPath || item.posterPath;
+        await item.save();
+      }
+
+      res.status(created ? 201 : 200).json({ message: "List updated", data: item });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+
+  private static async removeFromList(req: Request, res: Response, listType: 'watchlist' | 'favorite'): Promise<void> {
+    try {
+      const { mediaType, mediaId } = req.params;
+      const userId = (req as any).user.id;
+
+      const deleted = await UserListItem.destroy({
+        where: { userId, listType, mediaType, mediaId }
+      });
+
+      if (!deleted) {
+        res.status(404).json({ message: "Item not found" });
+        return;
+      }
+
+      res.status(200).json({ message: "Item removed" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+
+  static async getWatchlist(req: Request, res: Response): Promise<void> {
+    return UserController.getList(req, res, 'watchlist');
+  }
+
+  static async addToWatchlist(req: Request, res: Response): Promise<void> {
+    return UserController.addToList(req, res, 'watchlist');
+  }
+
+  static async removeFromWatchlist(req: Request, res: Response): Promise<void> {
+    return UserController.removeFromList(req, res, 'watchlist');
+  }
+
+  static async getFavorites(req: Request, res: Response): Promise<void> {
+    return UserController.getList(req, res, 'favorite');
+  }
+
+  static async addToFavorites(req: Request, res: Response): Promise<void> {
+    return UserController.addToList(req, res, 'favorite');
+  }
+
+  static async removeFromFavorites(req: Request, res: Response): Promise<void> {
+    return UserController.removeFromList(req, res, 'favorite');
+  }
+
   static async googleCallback(req: Request, res: Response): Promise<void> {
     try {
       const user = req.user as any;
@@ -462,6 +561,49 @@ export class UserController {
     } catch (error) {
       console.error('Google callback error:', error);
       res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=auth_failed`);
+    }
+  }
+
+  static async addPushToken(req: Request, res: Response): Promise<void> {
+    try {
+      const { token, deviceInfo } = req.body;
+      const userId = (req as any).user.id;
+
+      if (!token) {
+        res.status(400).json({ message: "Token is required" });
+        return;
+      }
+
+      await PushToken.findOrCreate({
+        where: { userId, token },
+        defaults: { deviceInfo }
+      });
+
+      res.status(200).json({ message: "Push token saved successfully" });
+    } catch (error) {
+      console.error('Add push token error:', error);
+      res.status(500).json({ message: "Server Error" });
+    }
+  }
+
+  static async removePushToken(req: Request, res: Response): Promise<void> {
+    try {
+      const { token } = req.body;
+      const userId = (req as any).user.id;
+
+      if (!token) {
+        res.status(400).json({ message: "Token is required" });
+        return;
+      }
+
+      await PushToken.destroy({
+        where: { userId, token }
+      });
+
+      res.status(200).json({ message: "Push token removed successfully" });
+    } catch (error) {
+      console.error('Remove push token error:', error);
+      res.status(500).json({ message: "Server Error" });
     }
   }
 }
