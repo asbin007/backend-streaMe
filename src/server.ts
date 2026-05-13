@@ -72,12 +72,14 @@ import authRoutes from './routes/authRoutes';
 import contentRoutes from './routes/contentRoutes';
 import tmdbRoutes from './routes/tmdbRoutes';
 import streamRoutes from './routes/stream.route';
+import reminderRoutes from './routes/reminderRoutes';
 import { startCronJobs } from './services/cronJobs';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/tmdb', tmdbRoutes);
 app.use('/api/v1/stream', streamRoutes);
+app.use('/api/reminders', reminderRoutes);
 
 app.get('/', (req, res) => {
   res.send('Server is running');

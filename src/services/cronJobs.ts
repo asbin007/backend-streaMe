@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { Op } from 'sequelize';
 import { User } from '../models/User';
 import { NotificationService } from './notificationService';
+import EmailReminderService from './emailReminderService';
 
 export const startCronJobs = () => {
 
@@ -45,6 +46,19 @@ export const startCronJobs = () => {
 
     } catch (error) {
       console.error('Error running retention cron job:', error);
+    }
+  });
+
+  // Reminder emails cron job - Runs every day at 9:00 AM
+  // Sends personalized reminder emails to users who haven't visited in 3+ days
+  cron.schedule('0 9 * * *', async () => {
+    console.log('Running email reminder cron job...');
+
+    try {
+      const sentCount = await EmailReminderService.sendBatchReminders(3); // 3 days inactivity threshold
+      console.log(`Email reminder cron job completed. Sent ${sentCount} emails.`);
+    } catch (error) {
+      console.error('Error running email reminder cron job:', error);
     }
   });
 

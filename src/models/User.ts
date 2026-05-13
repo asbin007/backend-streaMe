@@ -74,6 +74,24 @@ export class User extends Model {
   })
   isVerified!: boolean;
 
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  lastVisitedAt!: Date;
+
+  @Column({
+    type: DataType.DATE,
+    allowNull: true,
+  })
+  lastNotificationSentAt!: Date;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    defaultValue: true,
+  })
+  reminderEmailEnabled!: boolean;
+
   @CreatedAt
   createdAt!: Date;
 
