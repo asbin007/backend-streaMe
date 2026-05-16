@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import jwt, { Secret } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import otpGenerator from 'otp-generator';
 import { Op } from 'sequelize';
 import { User } from '../models/User';
@@ -9,14 +9,21 @@ import { UserListItem } from '../models/UserListItem';
 import { PushToken } from '../models/PushToken';
 import sendMail from '../services/sendMail';
 import checkOtpExpiration from '../services/otpExpiration';
+import { escapeHtml, getJwtExpiresIn, getJwtSecret, isValidEmail, normalizeEmail } from '../utils/security';
 
 export class UserController {
   static async register(req: Request, res: Response): Promise<void> {
     try {
-      const { username, email, password } = req.body;
+      const { username, password } = req.body;
+      const email = normalizeEmail(req.body.email);
       
       if (!username || !email || !password) {
         res.status(400).json({ message: "Fill all the fields" });
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        res.status(400).json({ message: "Invalid email address" });
         return;
       }
 
@@ -58,7 +65,7 @@ export class UserController {
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; padding: 20px; border-radius: 10px;">
               <h2 style="color: #6366f1;">Welcome to VeloraTV! 🎬</h2>
-              <p>Hi ${username},</p>
+              <p>Hi ${escapeHtml(username)},</p>
               <p>Thank you for joining VeloraTV. Please complete your registration using the OTP below:</p>
               <div style="background-color: #1e293b; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
                 <h1 style="color: #6366f1; font-size: 32px; letter-spacing: 5px; margin: 0;">${otp}</h1>
@@ -94,10 +101,16 @@ export class UserController {
 
   static async verifyOtp(req: Request, res: Response): Promise<void> {
     try {
-      const { email, otp } = req.body;
+      const { otp } = req.body;
+      const email = normalizeEmail(req.body.email);
       
       if (!email || !otp) {
         res.status(400).json({ message: "Email and OTP are required" });
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        res.status(400).json({ message: "Invalid email address" });
         return;
       }
 
@@ -124,8 +137,8 @@ export class UserController {
 
       const token = jwt.sign(
         { id: user.id, role: user.role },
-        process.env.WT_SECRET_KEY as Secret,
-        { expiresIn: process.env.JWT_EXPIRE_IN || '24h' } as any
+        getJwtSecret(),
+        { expiresIn: getJwtExpiresIn() }
       );
 
       res.status(200).json({
@@ -148,10 +161,15 @@ export class UserController {
 
   static async resendOtp(req: Request, res: Response): Promise<void> {
     try {
-      const { email } = req.body;
+      const email = normalizeEmail(req.body.email);
       
       if (!email) {
         res.status(400).json({ message: "Email is required" });
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        res.status(400).json({ message: "Invalid email address" });
         return;
       }
 
@@ -180,7 +198,7 @@ export class UserController {
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; padding: 20px; border-radius: 10px;">
               <h2 style="color: #6366f1;">New OTP Request - VeloraTV</h2>
-              <p>Hi ${user.username},</p>
+              <p>Hi ${escapeHtml(user.username)},</p>
               <p>Here's your new OTP:</p>
               <div style="background-color: #1e293b; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
                 <h1 style="color: #6366f1; font-size: 32px; letter-spacing: 5px; margin: 0;">${otp}</h1>
@@ -204,10 +222,16 @@ export class UserController {
 
   static async login(req: Request, res: Response): Promise<void> {
     try {
-      const { email, password } = req.body;
+      const { password } = req.body;
+      const email = normalizeEmail(req.body.email);
       
       if (!email || !password) {
         res.status(400).json({ message: "Fill all the fields" });
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        res.status(400).json({ message: "Invalid email address" });
         return;
       }
 
@@ -234,8 +258,8 @@ export class UserController {
 
       const token = jwt.sign(
         { id: user.id, role: user.role },
-        process.env.WT_SECRET_KEY as Secret,
-        { expiresIn: process.env.JWT_EXPIRE_IN || '24h' } as any
+        getJwtSecret(),
+        { expiresIn: getJwtExpiresIn() }
       );
 
       res.status(200).json({
@@ -257,9 +281,14 @@ export class UserController {
 
   static async forgotPassword(req: Request, res: Response): Promise<void> {
     try {
-      const { email } = req.body;
+      const email = normalizeEmail(req.body.email);
       if (!email) {
         res.status(400).json({ message: "Email is required" });
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        res.status(400).json({ message: "Invalid email address" });
         return;
       }
 
@@ -287,7 +316,7 @@ export class UserController {
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; padding: 20px; border-radius: 10px;">
             <h2 style="color: #6366f1;">Password Reset Request</h2>
-            <p>Hi ${user.username},</p>
+            <p>Hi ${escapeHtml(user.username)},</p>
             <p>Use the OTP below to reset your password:</p>
             <div style="background-color: #1e293b; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
               <h1 style="color: #6366f1; font-size: 32px; letter-spacing: 5px; margin: 0;">${otp}</h1>
@@ -307,10 +336,16 @@ export class UserController {
 
   static async resetPassword(req: Request, res: Response): Promise<void> {
     try {
-      const { email, otp, newPassword, confirmPassword } = req.body;
+      const { otp, newPassword, confirmPassword } = req.body;
+      const email = normalizeEmail(req.body.email);
 
       if (!email || !otp || !newPassword || !confirmPassword) {
         res.status(400).json({ message: "Fill all the fields" });
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        res.status(400).json({ message: "Invalid email address" });
         return;
       }
 
@@ -551,13 +586,14 @@ export class UserController {
       
       const token = jwt.sign(
         { id: user.id, role: user.role, avatarUrl: user.avatarUrl },
-        process.env.WT_SECRET_KEY as Secret,
-        { expiresIn: process.env.JWT_EXPIRE_IN || '24h' } as any
+        getJwtSecret(),
+        { expiresIn: getJwtExpiresIn() }
       );
 
       // Redirect to frontend with token
       const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-      res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
+      const params = new URLSearchParams({ token });
+      res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
     } catch (error) {
       console.error('Google callback error:', error);
       res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=auth_failed`);

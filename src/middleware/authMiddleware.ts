@@ -1,23 +1,25 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt, { Secret } from 'jsonwebtoken';
+import { RequestHandler } from 'express';
+import jwt from 'jsonwebtoken';
+import { getJwtSecret, JwtPayload } from '../utils/security';
 
-interface AuthRequest extends Request {
-  user?: any;
+export interface AuthenticatedRequest extends Express.Request {
+  user?: JwtPayload;
 }
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+export const authenticateToken: RequestHandler = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const [scheme, token] = authHeader?.split(' ') ?? [];
 
-  if (!token) {
-    return res.status(401).json({ message: 'Access token required' });
+  if (scheme !== 'Bearer' || !token) {
+    res.status(401).json({ message: 'Access token required' });
+    return;
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.WT_SECRET_KEY as Secret);
-    req.user = decoded;
+    const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload;
+    req.user = decoded as Express.User;
     next();
   } catch (error) {
-    return res.status(403).json({ message: 'Invalid or expired token' });
+    res.status(403).json({ message: 'Invalid or expired token' });
   }
 };
