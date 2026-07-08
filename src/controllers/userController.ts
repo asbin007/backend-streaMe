@@ -585,7 +585,7 @@ export class UserController {
       const user = req.user as any;
       
       const token = jwt.sign(
-        { id: user.id, role: user.role, avatarUrl: user.avatarUrl },
+        { id: user.id, username: user.username, email: user.email, role: user.role, avatarUrl: user.avatarUrl },
         getJwtSecret(),
         { expiresIn: getJwtExpiresIn() }
       );
