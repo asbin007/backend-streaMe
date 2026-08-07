@@ -1,8 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { User } from '../models/User';
 import EmailReminderService from '../services/emailReminderService';
+import { getUserId, requireAdmin, requireAuth } from '../middleware/clerkAuth';
+import { emailLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
+
+// Every route below identifies the caller from a verified Clerk session.
+// Previously none of them mounted auth at all, so `req.user` was always
+// undefined: the preference endpoints answered 401 unconditionally and
+// `/track-visit` accepted an arbitrary `userId` from the request body.
+router.use(requireAuth);
 
 /**
  * Track user visit - updates lastVisitedAt timestamp
@@ -10,13 +18,7 @@ const router = Router();
  */
 router.post('/track-visit', async (req: Request, res: Response) => {
   try {
-    const userId = req.body.userId || (req.user as any)?.id;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID required' });
-    }
-
-    await EmailReminderService.updateLastVisit(userId);
+    await EmailReminderService.updateLastVisit(getUserId(req));
 
     res.status(200).json({ success: true, message: 'Visit tracked' });
   } catch (error) {
@@ -30,11 +32,7 @@ router.post('/track-visit', async (req: Request, res: Response) => {
  */
 router.get('/reminder-preferences', async (req: Request, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
+    const userId = getUserId(req);
 
     const user = await User.findByPk(userId, {
       attributes: ['id', 'reminderEmailEnabled', 'lastNotificationSentAt', 'lastVisitedAt'],
@@ -60,12 +58,8 @@ router.get('/reminder-preferences', async (req: Request, res: Response) => {
  */
 router.put('/reminder-preferences', async (req: Request, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = getUserId(req);
     const { reminderEmailEnabled } = req.body;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
 
     if (typeof reminderEmailEnabled !== 'boolean') {
       return res.status(400).json({ error: 'reminderEmailEnabled must be a boolean' });
@@ -94,13 +88,9 @@ router.put('/reminder-preferences', async (req: Request, res: Response) => {
  * Send a test reminder email to current user
  * Useful for testing the feature without waiting for cron job
  */
-router.post('/send-test-reminder', async (req: Request, res: Response) => {
+router.post('/send-test-reminder', emailLimiter, async (req: Request, res: Response) => {
   try {
-    const userId = (req.user as any)?.id;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
+    const userId = getUserId(req);
 
     const user = await User.findByPk(userId);
     if (!user) {
@@ -135,16 +125,14 @@ router.post('/send-test-reminder', async (req: Request, res: Response) => {
  * Manually trigger reminder emails for all inactive users
  * Admin endpoint - requires admin authentication
  */
-router.post('/trigger-reminders', async (req: Request, res: Response) => {
+router.post('/trigger-reminders', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const userRole = (req.user as any)?.role;
+    const parsedDays = Number(req.body?.inactivityDays ?? 3);
+    const inactivityDays =
+      Number.isFinite(parsedDays) && parsedDays >= 1 && parsedDays <= 365
+        ? Math.floor(parsedDays)
+        : 3;
 
-    // Check if user is admin
-    if (userRole !== 'admin' && userRole !== 'super_admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    const inactivityDays = req.body.inactivityDays || 3;
     const sentCount = await EmailReminderService.sendBatchReminders(inactivityDays);
 
     res.status(200).json({

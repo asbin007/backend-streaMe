@@ -50,7 +50,7 @@ export class NotificationService {
 
       if (emails.length > 0) {
         const mailOptions = {
-          from: `"StreaMe Updates" <${config.email}>`,
+          from: `"AuraScreen Updates" <${config.email}>`,
           bcc: emails, // Using BCC so users don't see each other's emails
           subject: title,
           html: `
@@ -60,7 +60,7 @@ export class NotificationService {
               <br/>
               <p>
                 <a href="${config.base_url}" style="background-color: #e50914; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  Watch Now on StreaMe
+                  Watch Now on AuraScreen
                 </a>
               </p>
             </div>
@@ -138,7 +138,7 @@ export class NotificationService {
     if (emails && emails.length > 0) {
       try {
         const mailOptions = {
-          from: `"StreaMe Updates" <${config.email}>`,
+          from: `"AuraScreen Updates" <${config.email}>`,
           bcc: emails,
           subject: title,
           html: `
@@ -148,7 +148,7 @@ export class NotificationService {
               <br/>
               <p>
                 <a href="${config.base_url}" style="background-color: #e50914; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                  Watch Now on StreaMe
+                  Watch Now on AuraScreen
                 </a>
               </p>
             </div>

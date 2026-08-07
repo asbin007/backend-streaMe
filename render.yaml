@@ -3,8 +3,38 @@ services:
     name: backend-streaMe
     env: node
     plan: free
-    buildCommand: npm install && npm run build
+    # `npm ci` is reproducible from the lockfile. `--include=dev` is required
+    # because TypeScript lives in devDependencies and the build needs it.
+    # The compile itself runs from the `postinstall` hook — that hook is kept so
+    # a service configured through the Render dashboard (which ignores this
+    # file) still gets a build. Calling `npm run build` here too would compile
+    # twice on every deploy.
+    buildCommand: npm ci --include=dev
     startCommand: npm start
+    # Without this, Render's default probe hits `/`, which does not exercise the
+    # database connection and so reports healthy on a broken deploy.
+    healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: 20.11.0
+      - key: NODE_ENV
+        value: production
+      # Set in the Render dashboard, not here — these are secrets.
+      - key: DATABASE_URL
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_AUTHORIZED_PARTIES
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: CLIENT_ORIGINS
+        sync: false
+      - key: BASE_URL
+        sync: false
+      - key: API_ACCESS_TOKEN
+        sync: false
+      - key: MAILGUN_API_KEY
+        sync: false
+      - key: MAILGUN_DOMAIN
+        sync: false

@@ -20,7 +20,7 @@ const sendMail = async (options: MailOptions): Promise<boolean> => {
     const domain = config.mailgun_domain ? config.mailgun_domain.trim() : '';
     
     const data = await mg.messages.create(domain, {
-      from: `VeloraTV <postmaster@${domain}>`,
+      from: `AuraScreen <postmaster@${domain}>`,
       to: [options.to],
       subject: options.subject,
       text: options.text,

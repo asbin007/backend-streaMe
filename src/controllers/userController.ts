@@ -1,388 +1,49 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import otpGenerator from 'otp-generator';
-import { Op } from 'sequelize';
 import { User } from '../models/User';
 import { WatchHistory } from '../models/WatchHistory';
 import { UserListItem } from '../models/UserListItem';
 import { PushToken } from '../models/PushToken';
-import sendMail from '../services/sendMail';
-import checkOtpExpiration from '../services/otpExpiration';
-import { escapeHtml, getJwtExpiresIn, getJwtSecret, isValidEmail, normalizeEmail } from '../utils/security';
+import { getUserId } from '../middleware/clerkAuth';
 
+/**
+ * Account data for the signed-in user.
+ *
+ * Identity (registration, login, OTP, password reset, social sign-in) is
+ * handled entirely by Clerk. This controller only owns app-side data — watch
+ * history, lists, and push registrations — keyed by the local user row that
+ * `requireAuth` resolves from the Clerk session.
+ */
 export class UserController {
-  static async register(req: Request, res: Response): Promise<void> {
+  /** Profile for the signed-in user, read from the local record. */
+  static async getMe(req: Request, res: Response): Promise<void> {
     try {
-      const { username, password } = req.body;
-      const email = normalizeEmail(req.body.email);
-      
-      if (!username || !email || !password) {
-        res.status(400).json({ message: "Fill all the fields" });
-        return;
-      }
-
-      if (!isValidEmail(email)) {
-        res.status(400).json({ message: "Invalid email address" });
-        return;
-      }
-
-      if (password.length < 6) {
-        res.status(400).json({ message: "Password must be at least 6 characters long" });
-        return;
-      }
-
-      const existingUser = await User.findOne({ where: { email } });
-      if (existingUser) {
-        res.status(400).json({ message: "User already exists" });
-        return;
-      }
-
-      const otp = otpGenerator.generate(6, {
-        lowerCaseAlphabets: false,
-        upperCaseAlphabets: false,
-        specialChars: false,
-        digits: true,
+      const user = await User.findByPk(getUserId(req), {
+        attributes: [
+          'id',
+          'username',
+          'email',
+          'role',
+          'avatarUrl',
+          'isVerified',
+          'reminderEmailEnabled',
+          'createdAt',
+        ],
       });
 
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      const newUser = await User.create({
-        username,
-        email,
-        password: hashedPassword,
-        otp,
-        otpGeneratedTime: Date.now().toString(),
-        isVerified: false,
-        role: 'user'
-      });
-
-      try {
-        await sendMail({
-          to: email,
-          subject: "Registration OTP - VeloraTV",
-          text: `Your registration OTP is: ${otp}. This OTP will expire in 10 minutes.`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; padding: 20px; border-radius: 10px;">
-              <h2 style="color: #6366f1;">Welcome to VeloraTV! 🎬</h2>
-              <p>Hi ${escapeHtml(username)},</p>
-              <p>Thank you for joining VeloraTV. Please complete your registration using the OTP below:</p>
-              <div style="background-color: #1e293b; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
-                <h1 style="color: #6366f1; font-size: 32px; letter-spacing: 5px; margin: 0;">${otp}</h1>
-              </div>
-              <p><strong>This OTP will expire in 10 minutes.</strong></p>
-              <p>If you didn't create this account, please ignore this email.</p>
-              <p>Best regards,<br>VeloraTV Team</p>
-            </div>
-          `
-        });
-        
-        res.status(201).json({
-          message: "User registered successfully. Please check your email for OTP.",
-          userId: newUser.id,
-          email: newUser.email,
-          requiresOtp: true,
-        });
-      } catch (emailError) {
-        console.error("Email sending failed:", emailError);
-        res.status(201).json({
-          message: "User registered successfully but email failed. Please try logging in to resend OTP.",
-          userId: newUser.id,
-          email: newUser.email,
-          requiresOtp: true,
-          emailWarning: "Email delivery failed. Please check your spam folder or try logging in to resend OTP.",
-        });
-      }
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  }
-
-  static async verifyOtp(req: Request, res: Response): Promise<void> {
-    try {
-      const { otp } = req.body;
-      const email = normalizeEmail(req.body.email);
-      
-      if (!email || !otp) {
-        res.status(400).json({ message: "Email and OTP are required" });
-        return;
-      }
-
-      if (!isValidEmail(email)) {
-        res.status(400).json({ message: "Invalid email address" });
-        return;
-      }
-
-      const user = await User.findOne({ where: { email } });
       if (!user) {
-        res.status(404).json({ message: "User not found" });
+        res.status(404).json({ message: 'User not found' });
         return;
       }
 
-      if (user.otp !== otp) {
-        res.status(400).json({ message: "Invalid OTP" });
-        return;
-      }
-
-      if (!checkOtpExpiration(user.otpGeneratedTime, 600000)) { // 10 minutes
-        res.status(403).json({ message: "OTP expired. Please request a new one." });
-        return;
-      }
-
-      user.isVerified = true;
-      user.otp = "";
-      user.otpGeneratedTime = "";
-      await user.save();
-
-      const token = jwt.sign(
-        { id: user.id, role: user.role },
-        getJwtSecret(),
-        { expiresIn: getJwtExpiresIn() }
-      );
-
-      res.status(200).json({
-        message: "OTP verified successfully! You can now login.",
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          avatarUrl: user.avatarUrl,
-          isVerified: user.isVerified,
-        },
-      });
+      res.status(200).json({ data: user });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  }
-
-  static async resendOtp(req: Request, res: Response): Promise<void> {
-    try {
-      const email = normalizeEmail(req.body.email);
-      
-      if (!email) {
-        res.status(400).json({ message: "Email is required" });
-        return;
-      }
-
-      if (!isValidEmail(email)) {
-        res.status(400).json({ message: "Invalid email address" });
-        return;
-      }
-
-      const user = await User.findOne({ where: { email } });
-      if (!user) {
-        res.status(404).json({ message: "User not found" });
-        return;
-      }
-
-      const otp = otpGenerator.generate(6, {
-        lowerCaseAlphabets: false,
-        upperCaseAlphabets: false,
-        specialChars: false,
-        digits: true,
-      });
-
-      user.otp = otp;
-      user.otpGeneratedTime = Date.now().toString();
-      await user.save();
-
-      try {
-        await sendMail({
-          to: email,
-          subject: "New Registration OTP - VeloraTV",
-          text: `Your new registration OTP is: ${otp}. This OTP will expire in 10 minutes.`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; padding: 20px; border-radius: 10px;">
-              <h2 style="color: #6366f1;">New OTP Request - VeloraTV</h2>
-              <p>Hi ${escapeHtml(user.username)},</p>
-              <p>Here's your new OTP:</p>
-              <div style="background-color: #1e293b; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
-                <h1 style="color: #6366f1; font-size: 32px; letter-spacing: 5px; margin: 0;">${otp}</h1>
-              </div>
-              <p><strong>This OTP will expire in 10 minutes.</strong></p>
-              <p>Best regards,<br>VeloraTV Team</p>
-            </div>
-          `
-        });
-
-        res.status(200).json({ message: "New OTP sent to your email" });
-      } catch (emailError) {
-        console.error("Email sending failed:", emailError);
-        res.status(500).json({ message: "Failed to send OTP. Please try again." });
-      }
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  }
-
-  static async login(req: Request, res: Response): Promise<void> {
-    try {
-      const { password } = req.body;
-      const email = normalizeEmail(req.body.email);
-      
-      if (!email || !password) {
-        res.status(400).json({ message: "Fill all the fields" });
-        return;
-      }
-
-      if (!isValidEmail(email)) {
-        res.status(400).json({ message: "Invalid email address" });
-        return;
-      }
-
-      const user = await User.findOne({ where: { email } });
-      if (!user) {
-        res.status(400).json({ message: "Invalid credentials" });
-        return;
-      }
-
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) {
-        res.status(400).json({ message: "Invalid credentials" });
-        return;
-      }
-
-      if (!user.isVerified) {
-        res.status(403).json({
-          message: "Please verify your email with OTP before logging in.",
-          requiresOtp: true,
-          email: user.email
-        });
-        return;
-      }
-
-      const token = jwt.sign(
-        { id: user.id, role: user.role },
-        getJwtSecret(),
-        { expiresIn: getJwtExpiresIn() }
-      );
-
-      res.status(200).json({
-        message: "Login successful",
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          avatarUrl: user.avatarUrl,
-        },
-      });
-    } catch (error) {
-      console.error('Login error:', error);
+      console.error('Error fetching profile:', error);
       res.status(500).json({ message: 'Server error' });
     }
   }
 
-  static async forgotPassword(req: Request, res: Response): Promise<void> {
-    try {
-      const email = normalizeEmail(req.body.email);
-      if (!email) {
-        res.status(400).json({ message: "Email is required" });
-        return;
-      }
+  // ----------------------------------------------------------------- Admin
 
-      if (!isValidEmail(email)) {
-        res.status(400).json({ message: "Invalid email address" });
-        return;
-      }
-
-      const user = await User.findOne({ where: { email } });
-      if (!user) {
-        res.status(404).json({ message: "User not found" });
-        return;
-      }
-
-      const otp = otpGenerator.generate(6, {
-        lowerCaseAlphabets: false,
-        upperCaseAlphabets: false,
-        specialChars: false,
-        digits: true,
-      });
-
-      user.otp = otp;
-      user.otpGeneratedTime = Date.now().toString();
-      await user.save();
-
-      await sendMail({
-        to: email,
-        subject: "Password Reset OTP - VeloraTV",
-        text: `Your OTP for password reset is ${otp}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #f8fafc; padding: 20px; border-radius: 10px;">
-            <h2 style="color: #6366f1;">Password Reset Request</h2>
-            <p>Hi ${escapeHtml(user.username)},</p>
-            <p>Use the OTP below to reset your password:</p>
-            <div style="background-color: #1e293b; padding: 20px; text-align: center; margin: 20px 0; border-radius: 8px;">
-              <h1 style="color: #6366f1; font-size: 32px; letter-spacing: 5px; margin: 0;">${otp}</h1>
-            </div>
-            <p><strong>This OTP will expire in 10 minutes.</strong></p>
-            <p>If you didn't request this, please ignore this email.</p>
-          </div>
-        `
-      });
-
-      res.status(200).json({ message: "OTP sent to your email" });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  }
-
-  static async resetPassword(req: Request, res: Response): Promise<void> {
-    try {
-      const { otp, newPassword, confirmPassword } = req.body;
-      const email = normalizeEmail(req.body.email);
-
-      if (!email || !otp || !newPassword || !confirmPassword) {
-        res.status(400).json({ message: "Fill all the fields" });
-        return;
-      }
-
-      if (!isValidEmail(email)) {
-        res.status(400).json({ message: "Invalid email address" });
-        return;
-      }
-
-      if (newPassword !== confirmPassword) {
-        res.status(400).json({ message: "Passwords do not match" });
-        return;
-      }
-
-      const user = await User.findOne({ where: { email } });
-      if (!user) {
-        res.status(404).json({ message: "User not found" });
-        return;
-      }
-
-      if (user.otp !== otp) {
-        res.status(400).json({ message: "Invalid OTP" });
-        return;
-      }
-
-      if (!checkOtpExpiration(user.otpGeneratedTime, 600000)) {
-        res.status(403).json({ message: "OTP expired. Please request a new one." });
-        return;
-      }
-
-      user.password = await bcrypt.hash(newPassword, 10);
-      user.otp = "";
-      user.otpGeneratedTime = "";
-      await user.save();
-
-      res.status(200).json({ message: "Password updated successfully" });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  }
-
-  // Admin Management
   static async getAllUsers(req: Request, res: Response): Promise<void> {
     try {
       const users = await User.findAll({
@@ -390,50 +51,53 @@ export class UserController {
       });
       res.status(200).json({ data: users });
     } catch (error) {
-      res.status(500).json({ message: "Server error" });
+      console.error('Error listing users:', error);
+      res.status(500).json({ message: 'Server error' });
     }
   }
 
   static async deleteUser(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      
+
       const user = await User.findByPk(id);
       if (!user) {
-        res.status(404).json({ message: "User not found" });
+        res.status(404).json({ message: 'User not found' });
         return;
       }
 
       if (user.role === 'admin' || user.role === 'super_admin') {
-        res.status(403).json({ message: "Cannot delete admin users" });
+        res.status(403).json({ message: 'Cannot delete admin users' });
         return;
       }
 
       await user.destroy();
-      res.status(200).json({ message: "User deleted successfully" });
+      res.status(200).json({ message: 'User deleted successfully' });
     } catch (error) {
-      res.status(500).json({ message: "Server error" });
+      console.error('Error deleting user:', error);
+      res.status(500).json({ message: 'Server error' });
     }
   }
 
-  // History & Recents
+  // ------------------------------------------------------- History & Recents
+
   static async addToHistory(req: Request, res: Response): Promise<void> {
     try {
       const { mediaId, mediaType, title, posterPath, progress, duration } = req.body;
-      const userId = (req as any).user.id;
+      const userId = getUserId(req);
 
       if (!mediaId || !mediaType) {
-        res.status(400).json({ message: "Media ID and Type are required" });
+        res.status(400).json({ message: 'Media ID and Type are required' });
         return;
       }
 
       let history = await WatchHistory.findOne({
-        where: { userId, mediaId, mediaType }
+        where: { userId, mediaId, mediaType },
       });
 
       if (history) {
-        history.progress = progress || history.progress;
-        history.duration = duration || history.duration;
+        history.progress = progress ?? history.progress;
+        history.duration = duration ?? history.duration;
         history.lastWatchedAt = new Date();
         await history.save();
       } else {
@@ -445,68 +109,77 @@ export class UserController {
           posterPath,
           progress: progress || 0,
           duration: duration || 0,
-          lastWatchedAt: new Date()
+          lastWatchedAt: new Date(),
         });
       }
 
-      res.status(200).json({ message: "History updated", data: history });
+      res.status(200).json({ message: 'History updated', data: history });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Server error" });
+      console.error('Error updating history:', error);
+      res.status(500).json({ message: 'Server error' });
     }
   }
 
   static async getHistory(req: Request, res: Response): Promise<void> {
     try {
-      const userId = (req as any).user.id;
       const history = await WatchHistory.findAll({
-        where: { userId },
+        where: { userId: getUserId(req) },
         order: [['lastWatchedAt', 'DESC']],
-        limit: 50
+        limit: 50,
       });
       res.status(200).json({ data: history });
     } catch (error) {
-      res.status(500).json({ message: "Server error" });
+      console.error('Error fetching history:', error);
+      res.status(500).json({ message: 'Server error' });
     }
   }
 
   static async getRecents(req: Request, res: Response): Promise<void> {
     try {
-      const userId = (req as any).user.id;
       const recents = await WatchHistory.findAll({
-        where: { userId },
+        where: { userId: getUserId(req) },
         order: [['lastWatchedAt', 'DESC']],
-        limit: 10
+        limit: 10,
       });
       res.status(200).json({ data: recents });
     } catch (error) {
-      res.status(500).json({ message: "Server error" });
+      console.error('Error fetching recents:', error);
+      res.status(500).json({ message: 'Server error' });
     }
   }
 
-  private static async getList(req: Request, res: Response, listType: 'watchlist' | 'favorite'): Promise<void> {
+  // -------------------------------------------------------------- User lists
+
+  private static async getList(
+    req: Request,
+    res: Response,
+    listType: 'watchlist' | 'favorite'
+  ): Promise<void> {
     try {
-      const userId = (req as any).user.id;
       const items = await UserListItem.findAll({
-        where: { userId, listType },
+        where: { userId: getUserId(req), listType },
         order: [['createdAt', 'DESC']],
-        limit: 100
+        limit: 100,
       });
 
       res.status(200).json({ data: items });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Server error" });
+      console.error(`Error fetching ${listType}:`, error);
+      res.status(500).json({ message: 'Server error' });
     }
   }
 
-  private static async addToList(req: Request, res: Response, listType: 'watchlist' | 'favorite'): Promise<void> {
+  private static async addToList(
+    req: Request,
+    res: Response,
+    listType: 'watchlist' | 'favorite'
+  ): Promise<void> {
     try {
       const { mediaId, mediaType, title, posterPath } = req.body;
-      const userId = (req as any).user.id;
+      const userId = getUserId(req);
 
       if (!mediaId || !mediaType || !title) {
-        res.status(400).json({ message: "Media ID, media type, and title are required" });
+        res.status(400).json({ message: 'Media ID, media type, and title are required' });
         return;
       }
 
@@ -518,8 +191,8 @@ export class UserController {
           mediaId,
           mediaType,
           title,
-          posterPath: posterPath || ''
-        }
+          posterPath: posterPath || '',
+        },
       });
 
       if (!created) {
@@ -528,31 +201,34 @@ export class UserController {
         await item.save();
       }
 
-      res.status(created ? 201 : 200).json({ message: "List updated", data: item });
+      res.status(created ? 201 : 200).json({ message: 'List updated', data: item });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Server error" });
+      console.error(`Error adding to ${listType}:`, error);
+      res.status(500).json({ message: 'Server error' });
     }
   }
 
-  private static async removeFromList(req: Request, res: Response, listType: 'watchlist' | 'favorite'): Promise<void> {
+  private static async removeFromList(
+    req: Request,
+    res: Response,
+    listType: 'watchlist' | 'favorite'
+  ): Promise<void> {
     try {
       const { mediaType, mediaId } = req.params;
-      const userId = (req as any).user.id;
 
       const deleted = await UserListItem.destroy({
-        where: { userId, listType, mediaType, mediaId }
+        where: { userId: getUserId(req), listType, mediaType, mediaId },
       });
 
       if (!deleted) {
-        res.status(404).json({ message: "Item not found" });
+        res.status(404).json({ message: 'Item not found' });
         return;
       }
 
-      res.status(200).json({ message: "Item removed" });
+      res.status(200).json({ message: 'Item removed' });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Server error" });
+      console.error(`Error removing from ${listType}:`, error);
+      res.status(500).json({ message: 'Server error' });
     }
   }
 
@@ -580,66 +256,44 @@ export class UserController {
     return UserController.removeFromList(req, res, 'favorite');
   }
 
-  static async googleCallback(req: Request, res: Response): Promise<void> {
-    try {
-      const user = req.user as any;
-      
-      const token = jwt.sign(
-        { id: user.id, username: user.username, email: user.email, role: user.role, avatarUrl: user.avatarUrl },
-        getJwtSecret(),
-        { expiresIn: getJwtExpiresIn() }
-      );
-
-      // Redirect to frontend with token
-      const frontendUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-      const params = new URLSearchParams({ token });
-      res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
-    } catch (error) {
-      console.error('Google callback error:', error);
-      res.redirect(`${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=auth_failed`);
-    }
-  }
+  // ------------------------------------------------------------ Push tokens
 
   static async addPushToken(req: Request, res: Response): Promise<void> {
     try {
       const { token, deviceInfo } = req.body;
-      const userId = (req as any).user.id;
 
-      if (!token) {
-        res.status(400).json({ message: "Token is required" });
+      if (!token || typeof token !== 'string') {
+        res.status(400).json({ message: 'Token is required' });
         return;
       }
 
       await PushToken.findOrCreate({
-        where: { userId, token },
-        defaults: { deviceInfo }
+        where: { userId: getUserId(req), token },
+        defaults: { deviceInfo },
       });
 
-      res.status(200).json({ message: "Push token saved successfully" });
+      res.status(200).json({ message: 'Push token saved successfully' });
     } catch (error) {
       console.error('Add push token error:', error);
-      res.status(500).json({ message: "Server Error" });
+      res.status(500).json({ message: 'Server Error' });
     }
   }
 
   static async removePushToken(req: Request, res: Response): Promise<void> {
     try {
       const { token } = req.body;
-      const userId = (req as any).user.id;
 
-      if (!token) {
-        res.status(400).json({ message: "Token is required" });
+      if (!token || typeof token !== 'string') {
+        res.status(400).json({ message: 'Token is required' });
         return;
       }
 
-      await PushToken.destroy({
-        where: { userId, token }
-      });
+      await PushToken.destroy({ where: { userId: getUserId(req), token } });
 
-      res.status(200).json({ message: "Push token removed successfully" });
+      res.status(200).json({ message: 'Push token removed successfully' });
     } catch (error) {
       console.error('Remove push token error:', error);
-      res.status(500).json({ message: "Server Error" });
+      res.status(500).json({ message: 'Server Error' });
     }
   }
 }

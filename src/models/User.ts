@@ -37,6 +37,19 @@ export class User extends Model {
   })
   password!: string;
 
+  /**
+   * Clerk's user id (`user_...`). Identity now lives in Clerk; this table keeps
+   * the local row so watch history, lists, and push tokens retain their foreign
+   * keys. Nullable because rows created before the migration are linked lazily,
+   * by email, the first time that person signs in through Clerk.
+   */
+  @Column({
+    type: DataType.STRING,
+    allowNull: true,
+    unique: true,
+  })
+  clerkId!: string | null;
+
   @Column({
     type: DataType.STRING,
     allowNull: true,

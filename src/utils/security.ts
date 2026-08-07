@@ -1,23 +1,7 @@
-import { SignOptions } from 'jsonwebtoken';
-
-export interface JwtPayload {
-  id: number | string;
-  role?: string;
-}
-
-export function getJwtSecret(): string {
-  const secret = process.env.WT_SECRET_KEY;
-
-  if (!secret || secret === 'default_secret') {
-    throw new Error('WT_SECRET_KEY must be set to a strong secret');
-  }
-
-  return secret;
-}
-
-export function getJwtExpiresIn(): SignOptions['expiresIn'] {
-  return (process.env.JWT_EXPIRE_IN || '24h') as SignOptions['expiresIn'];
-}
+/**
+ * The JWT and OTP helpers that used to live here were removed along with the
+ * password auth flow — Clerk owns sessions now (see `middleware/clerkAuth.ts`).
+ */
 
 export function normalizeEmail(email: unknown): string {
   return String(email || '').trim().toLowerCase();
@@ -27,6 +11,7 @@ export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+/** Escapes interpolated values before they go into an outbound HTML email. */
 export function escapeHtml(value: unknown): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')

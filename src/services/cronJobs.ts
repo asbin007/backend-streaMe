@@ -38,7 +38,7 @@ export const startCronJobs = () => {
       const emails = inactiveUsers.map(u => u.email).filter(e => !!e);
 
       const title = 'We Miss You! 🎬';
-      const body = 'It looks like you haven\'t visited StreaMe in a while. Come back and check out our new movies and episodes!';
+      const body = 'It looks like you haven\'t visited AuraScreen in a while. Come back and check out our new movies and episodes!';
 
       await NotificationService.sendTargetedNotification(userIds, emails, title, body, { type: 'retention' });
 

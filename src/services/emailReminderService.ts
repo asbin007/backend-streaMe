@@ -127,7 +127,7 @@ export class EmailReminderService {
         <body>
           <div class="container">
             <div class="header">
-              <h1 style="margin: 0; font-size: 32px;">🎬 Aura Screen</h1>
+              <h1 style="margin: 0; font-size: 32px;">🎬 AuraScreen</h1>
               <p style="margin: 10px 0 0 0; font-size: 16px;">We miss you!</p>
             </div>
 
@@ -135,7 +135,7 @@ export class EmailReminderService {
               <p>Hi <strong>${userName}</strong>,</p>
               
               <p>
-                It's been a while since you visited Aura Screen! 🍿 We've curated some amazing content just for you based on your favorites.
+                It's been a while since you visited AuraScreen! 🍿 We've curated some amazing content just for you based on your favorites.
               </p>
 
               ${
@@ -173,10 +173,10 @@ export class EmailReminderService {
 
             <div class="footer">
               <p>
-                This is a reminder email from Aura Screen. 
+                This is a reminder email from AuraScreen. 
                 <a href="${baseUrl}/settings" style="color: #e50914; text-decoration: none;">Manage preferences</a>
               </p>
-              <p>© ${new Date().getFullYear()} Aura Screen. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} AuraScreen. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -203,7 +203,7 @@ export class EmailReminderService {
 
       // Send email
       const mailOptions = {
-        from: `"🎬 Aura Screen" <${config.email}>`,
+        from: `"🎬 AuraScreen" <${config.email}>`,
         to: user.email,
         subject: `${user.username}, we have new content waiting for you! 🎬`,
         html: htmlContent,

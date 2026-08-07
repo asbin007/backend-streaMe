@@ -1,70 +1,88 @@
 import { Request, Response } from "express";
 
+/**
+ * Embed URL builders, keyed by the `server` query parameter. Keeping these in a
+ * lookup rather than a switch means the set of reachable hosts is a closed list
+ * that matches the CSP `frameSrc` allowlist in `server.ts`.
+ */
+const SERVERS: Record<
+	string,
+	(id: string, season: string, episode: string, isMovie: boolean) => string
+> = {
+	vidsrc: (id, s, e, isMovie) =>
+		isMovie
+			? `https://vidsrc.xyz/embed/movie/${id}`
+			: `https://vidsrc.xyz/embed/tv/${id}/${s}/${e}`,
+	"vidsrc.to": (id, s, e, isMovie) =>
+		isMovie
+			? `https://vidsrc.to/embed/movie/${id}`
+			: `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
+	vidlink: (id, s, e, isMovie) =>
+		isMovie
+			? `https://vidlink.pro/movie/${id}`
+			: `https://vidlink.pro/tv/${id}/${s}/${e}`,
+	superembed: (id, s, e, isMovie) =>
+		isMovie
+			? `https://superembed.stream/e.php?id=${id}&tmdb=1`
+			: `https://superembed.stream/e.php?id=${id}&tmdb=1&season=${s}&episode=${e}`,
+	vidbinge: (id, s, e, isMovie) =>
+		isMovie
+			? `https://vidbinge.com/embed/movie/${id}`
+			: `https://vidbinge.com/embed/tv/${id}/${s}/${e}`,
+};
+
+const DEFAULT_SERVER = "vidsrc";
+
+/** TMDB ids, seasons, and episodes are always positive integers. */
+const isNumericId = (value: unknown): value is string =>
+	typeof value === "string" && /^\d{1,10}$/.test(value);
+
 export const getStreamingUrl = async (req: Request, res: Response) => {
 	try {
 		const { mediaType, id } = req.params;
-		const { season, episode, server = "vidsrc" } = req.query;
+		const { season, episode, server } = req.query;
 
-		if (!mediaType || !id) {
-			return res.status(400).json({ success: false, message: "Media type and ID are required" });
+		if (mediaType !== "movie" && mediaType !== "tv") {
+			return res
+				.status(400)
+				.json({ success: false, message: "Media type must be 'movie' or 'tv'" });
 		}
 
-		let url = "";
-
-		switch (server) {
-			case "vidsrc":
-				if (mediaType === "movie") {
-					url = `https://vidsrc.xyz/embed/movie/${id}`;
-				} else {
-					url = `https://vidsrc.xyz/embed/tv/${id}/${season}/${episode}`;
-				}
-				break;
-
-			case "vidsrc.to":
-				if (mediaType === "movie") {
-					url = `https://vidsrc.to/embed/movie/${id}`;
-				} else {
-					url = `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`;
-				}
-				break;
-
-			case "vidlink":
-				if (mediaType === "movie") {
-					url = `https://vidlink.pro/movie/${id}`;
-				} else {
-					url = `https://vidlink.pro/tv/${id}/${season}/${episode}`;
-				}
-				break;
-
-			case "superembed":
-				if (mediaType === "movie") {
-					url = `https://superembed.stream/e.php?id=${id}&tmdb=1`;
-				} else {
-					url = `https://superembed.stream/e.php?id=${id}&tmdb=1&season=${season}&episode=${episode}`;
-				}
-				break;
-            
-            case "vidbinge":
-                if (mediaType === "movie") {
-                    url = `https://vidbinge.com/embed/movie/${id}`;
-                } else {
-                    url = `https://vidbinge.com/embed/tv/${id}/${season}/${episode}`;
-                }
-                break;
-
-			default:
-				// Fallback to vidsrc
-				if (mediaType === "movie") {
-					url = `https://vidsrc.xyz/embed/movie/${id}`;
-				} else {
-					url = `https://vidsrc.xyz/embed/tv/${id}/${season}/${episode}`;
-				}
-				break;
+		// These ids are interpolated straight into a third-party URL that the
+		// client loads in an iframe, so they are validated rather than trusted.
+		if (!isNumericId(id)) {
+			return res
+				.status(400)
+				.json({ success: false, message: "A numeric media ID is required" });
 		}
 
-		res.status(200).json({ success: true, url, server });
-	} catch (error: any) {
-		console.log("Error in getStreamingUrl controller", error.message);
+		const isMovie = mediaType === "movie";
+		let seasonValue = "";
+		let episodeValue = "";
+
+		if (!isMovie) {
+			seasonValue = String(season ?? "");
+			episodeValue = String(episode ?? "");
+
+			if (!isNumericId(seasonValue) || !isNumericId(episodeValue)) {
+				return res.status(400).json({
+					success: false,
+					message: "Numeric season and episode are required for TV media",
+				});
+			}
+		}
+
+		const requestedServer = String(server ?? DEFAULT_SERVER);
+		const build = SERVERS[requestedServer] ?? SERVERS[DEFAULT_SERVER];
+		const resolvedServer = SERVERS[requestedServer]
+			? requestedServer
+			: DEFAULT_SERVER;
+
+		const url = build(id, seasonValue, episodeValue, isMovie);
+
+		res.status(200).json({ success: true, url, server: resolvedServer });
+	} catch (error) {
+		console.error("Error in getStreamingUrl controller", error);
 		res.status(500).json({ success: false, message: "Internal Server Error" });
 	}
 };

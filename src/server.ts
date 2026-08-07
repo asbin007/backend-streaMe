@@ -4,14 +4,20 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
-import passport from 'passport';
-import './config/passport';
+import { validateEnv } from './config/env';
+import { createRateLimiter } from './middleware/rateLimiter';
 import sequelize from './config/database';
 
 dotenv.config();
+validateEnv();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Render (and every other PaaS) terminates TLS at a proxy. Without this,
+// `req.ip` is the proxy's address for every request, which collapses the rate
+// limiter into a single shared bucket and breaks `secure` cookie detection.
+app.set('trust proxy', 1);
 const DEFAULT_CLIENT_ORIGINS = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -30,35 +36,8 @@ const CLIENT_ORIGINS = [
   .filter((origin): origin is string => Boolean(origin?.trim()))
   .map(origin => origin.trim());
 
-function createRateLimiter({ windowMs = 60_000, max = 180 } = {}) {
-  const hits = new Map<string, { count: number; resetAt: number }>();
-
-  return (req: Request, res: Response, next: NextFunction) => {
-    const key = req.ip || req.socket.remoteAddress || 'unknown';
-    const now = Date.now();
-    const record = hits.get(key) || { count: 0, resetAt: now + windowMs };
-
-    if (record.resetAt <= now) {
-      record.count = 0;
-      record.resetAt = now + windowMs;
-    }
-
-    record.count += 1;
-    hits.set(key, record);
-    res.setHeader('X-RateLimit-Limit', String(max));
-    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, max - record.count)));
-
-    if (record.count > max) {
-      return res.status(429).json({ error: 'Too many requests, please try again later' });
-    }
-
-    next();
-  };
-}
-
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use(passport.initialize());
 app.use(cors({
   origin(origin, callback) {
     if (!origin) return callback(null, true);
@@ -100,6 +79,12 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
+// Health check sits ahead of the limiter so platform uptime probes (which poll
+// continuously from a small set of IPs) never consume a client's quota.
+app.get('/health', (req, res) => {
+  res.json({ ok: true, uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 app.use(createRateLimiter());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(cookieParser());
@@ -110,10 +95,6 @@ import tmdbRoutes from './routes/tmdbRoutes';
 import streamRoutes from './routes/stream.route';
 import reminderRoutes from './routes/reminderRoutes';
 import { startCronJobs } from './services/cronJobs';
-
-app.get('/health', (req, res) => {
-  res.json({ ok: true, uptime: process.uptime(), timestamp: new Date().toISOString() });
-});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/content', contentRoutes);

@@ -1,135 +1,97 @@
 import { Request, Response } from 'express';
 import { tmdbService } from '../services/tmdbService';
 
+/**
+ * Wraps a TMDB passthrough handler.
+ *
+ * Handlers used to return `error.message` from the upstream failure straight to
+ * the client, which exposes internal request detail for no benefit. Now the
+ * detail is logged server-side and the client sees a stable message. A failing
+ * upstream is reported as 502, not 500, so it is distinguishable in monitoring
+ * from a genuine bug in this service.
+ */
+function handle(
+  label: string,
+  fn: (req: Request) => Promise<unknown>
+): (req: Request, res: Response) => Promise<void> {
+  return async (req, res) => {
+    try {
+      const data = await fn(req);
+      res.status(200).json(data);
+    } catch (error) {
+      console.error(`${label} failed:`, error);
+      res.status(502).json({ message: label });
+    }
+  };
+}
+
 export class TmdbController {
-  static async getTrending(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType, timeWindow } = req.params;
-      const data = await tmdbService.getTrending(mediaType, timeWindow);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching trending data', error: error.message });
-    }
-  }
+  static getTrending = handle('Error fetching trending data', req =>
+    tmdbService.getTrending(req.params.mediaType, req.params.timeWindow)
+  );
 
-  static async getPopular(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType } = req.params;
-      const data = await tmdbService.getPopular(mediaType);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching popular data', error: error.message });
-    }
-  }
+  static getPopular = handle('Error fetching popular data', req =>
+    tmdbService.getPopular(req.params.mediaType)
+  );
 
-  static async getTopRated(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType } = req.params;
-      const data = await tmdbService.getTopRated(mediaType);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching top rated data', error: error.message });
-    }
-  }
+  static getTopRated = handle('Error fetching top rated data', req =>
+    tmdbService.getTopRated(req.params.mediaType)
+  );
 
-  static async getDetails(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType, id } = req.params;
-      const data = await tmdbService.getDetails(mediaType, id);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching details', error: error.message });
-    }
-  }
+  static getDetails = handle('Error fetching details', req =>
+    tmdbService.getDetails(req.params.mediaType, req.params.id)
+  );
 
-  static async getSeasonDetails(req: Request, res: Response): Promise<void> {
-    try {
-      const { tvId, seasonNumber } = req.params;
-      const data = await tmdbService.getSeasonDetails(tvId, seasonNumber);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching season details', error: error.message });
-    }
-  }
+  static getSeasonDetails = handle('Error fetching season details', req =>
+    tmdbService.getSeasonDetails(req.params.tvId, req.params.seasonNumber)
+  );
+
+  static getSimilar = handle('Error fetching similar content', req =>
+    tmdbService.getSimilar(req.params.mediaType, req.params.id)
+  );
+
+  static getVideos = handle('Error fetching videos', req =>
+    tmdbService.getVideos(req.params.mediaType, req.params.id)
+  );
+
+  static getGenres = handle('Error fetching genres', req =>
+    tmdbService.getGenres(req.params.mediaType)
+  );
+
+  static getSeasonal = handle('Error fetching seasonal content', req =>
+    tmdbService.getSeasonal(req.params.mediaType)
+  );
+
+  static discover = handle('Error discovering content', req =>
+    tmdbService.discover(
+      req.params.mediaType,
+      req.query.page as string,
+      req.query.with_genres as string
+    )
+  );
+
+  static getContents = handle('Error fetching contents', req =>
+    tmdbService.getContents(req.params.mediaType, {
+      page: req.query.page as string,
+      sortBy: req.query.sortBy as string,
+      genreId: req.query.genreId as string,
+    })
+  );
 
   static async searchMulti(req: Request, res: Response): Promise<void> {
-    try {
-      const { query, page } = req.query;
-      if (!query) {
-        res.status(400).json({ message: 'Query parameter is required' });
-        return;
-      }
-      const data = await tmdbService.searchMulti(query as string, page as string);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error searching', error: error.message });
-    }
-  }
+    const { query, page } = req.query;
 
-  static async getSimilar(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType, id } = req.params;
-      const data = await tmdbService.getSimilar(mediaType, id);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching similar content', error: error.message });
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      res.status(400).json({ message: 'Query parameter is required' });
+      return;
     }
-  }
 
-  static async getVideos(req: Request, res: Response): Promise<void> {
     try {
-      const { mediaType, id } = req.params;
-      const data = await tmdbService.getVideos(mediaType, id);
+      const data = await tmdbService.searchMulti(query.trim(), page as string);
       res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching videos', error: error.message });
-    }
-  }
-
-  static async getGenres(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType } = req.params;
-      const data = await tmdbService.getGenres(mediaType);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching genres', error: error.message });
-    }
-  }
-
-  static async discover(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType } = req.params;
-      const { page, with_genres } = req.query;
-      const data = await tmdbService.discover(mediaType, page as string, with_genres as string);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error discovering content', error: error.message });
-    }
-  }
-
-  static async getContents(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType } = req.params;
-      const { page, sortBy, genreId } = req.query;
-      const filters = {
-        page: page as string,
-        sortBy: sortBy as string,
-        genreId: genreId as string,
-      };
-      const data = await tmdbService.getContents(mediaType, filters);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching contents', error: error.message });
-    }
-  }
-
-  static async getSeasonal(req: Request, res: Response): Promise<void> {
-    try {
-      const { mediaType } = req.params;
-      const data = await tmdbService.getSeasonal(mediaType);
-      res.status(200).json(data);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error fetching seasonal content', error: error.message });
+    } catch (error) {
+      console.error('Error searching:', error);
+      res.status(502).json({ message: 'Error searching' });
     }
   }
 }

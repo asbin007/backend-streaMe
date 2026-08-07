@@ -1,40 +1,35 @@
 import { Router } from 'express';
-import passport from 'passport';
 import { UserController } from '../controllers/userController';
-import { authenticateToken } from '../middleware/authMiddleware';
+import { requireAdmin, requireAuth } from '../middleware/clerkAuth';
 
 const router = Router();
 
-router.post('/register', UserController.register);
-router.post('/login', UserController.login);
-router.post('/verify-otp', UserController.verifyOtp);
-router.post('/resend-otp', UserController.resendOtp);
-router.post('/forgot-password', UserController.forgotPassword);
-router.post('/reset-password', UserController.resetPassword);
+// Sign-up, sign-in, email verification, password reset, and social login are
+// all handled by Clerk in the client. This service no longer issues credentials
+// of its own — it only serves data for an already-authenticated Clerk session.
+router.use(requireAuth);
 
-// Google OAuth
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-router.get(
-  '/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: '/login' }),
-  UserController.googleCallback
-);
+router.get('/me', UserController.getMe);
 
 // History & Recents
-router.post('/history', authenticateToken, UserController.addToHistory);
-router.get('/history', authenticateToken, UserController.getHistory);
-router.get('/recents', authenticateToken, UserController.getRecents);
+router.post('/history', UserController.addToHistory);
+router.get('/history', UserController.getHistory);
+router.get('/recents', UserController.getRecents);
 
 // User retention lists
-router.get('/watchlist', authenticateToken, UserController.getWatchlist);
-router.post('/watchlist', authenticateToken, UserController.addToWatchlist);
-router.delete('/watchlist/:mediaType/:mediaId', authenticateToken, UserController.removeFromWatchlist);
-router.get('/favorites', authenticateToken, UserController.getFavorites);
-router.post('/favorites', authenticateToken, UserController.addToFavorites);
-router.delete('/favorites/:mediaType/:mediaId', authenticateToken, UserController.removeFromFavorites);
+router.get('/watchlist', UserController.getWatchlist);
+router.post('/watchlist', UserController.addToWatchlist);
+router.delete('/watchlist/:mediaType/:mediaId', UserController.removeFromWatchlist);
+router.get('/favorites', UserController.getFavorites);
+router.post('/favorites', UserController.addToFavorites);
+router.delete('/favorites/:mediaType/:mediaId', UserController.removeFromFavorites);
 
-// Push Token routes
-router.post('/push-token', authenticateToken, UserController.addPushToken);
-router.delete('/push-token', authenticateToken, UserController.removePushToken);
+// Push tokens
+router.post('/push-token', UserController.addPushToken);
+router.delete('/push-token', UserController.removePushToken);
+
+// Admin
+router.get('/users', requireAdmin, UserController.getAllUsers);
+router.delete('/users/:id', requireAdmin, UserController.deleteUser);
 
 export default router;
