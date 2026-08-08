@@ -14,6 +14,9 @@ validateEnv();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+/** Reported by /health and /ready; set by the background connect routine. */
+let dbStatus: 'connecting' | 'connected' | 'unavailable' = 'connecting';
+
 // Render (and every other PaaS) terminates TLS at a proxy. Without this,
 // `req.ip` is the proxy's address for every request, which collapses the rate
 // limiter into a single shared bucket and breaks `secure` cookie detection.
@@ -81,8 +84,23 @@ app.use(
 );
 // Health check sits ahead of the limiter so platform uptime probes (which poll
 // continuously from a small set of IPs) never consume a client's quota.
+/**
+ * Liveness. Always 200 while the process is up, so the platform never kills a
+ * running server over a database blip. Database state is reported, not fatal.
+ */
 app.get('/health', (req, res) => {
-  res.json({ ok: true, uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({
+    ok: true,
+    database: dbStatus,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/** Readiness: 503 until the database is actually usable. */
+app.get('/ready', (req, res) => {
+  const ready = dbStatus === 'connected';
+  res.status(ready ? 200 : 503).json({ ready, database: dbStatus });
 });
 
 app.use(createRateLimiter());
@@ -117,13 +135,16 @@ app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
 
 const startServer = async () => {
   try {
-    await sequelize.authenticate();
-    console.log('Database connected successfully.');
-    await sequelize.sync({ alter: process.env.NODE_ENV !== 'production' });
-
-    // Start background scheduled tasks
-    startCronJobs();
-
+    // Bind the port FIRST.
+    //
+    // This used to await sequelize.authenticate() before listening. When the
+    // database was unreachable that call hung rather than rejecting, so the
+    // process stayed alive without ever opening a port and Render killed the
+    // deploy with "no open ports detected" — a database problem presenting as
+    // a deploy failure with nothing useful in the log.
+    //
+    // Listening first means the platform's port scan and health check always
+    // succeed, and database trouble is reported through /health instead.
     const server = app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
@@ -131,16 +152,66 @@ const startServer = async () => {
     const shutdown = async (signal: string) => {
       console.log(`${signal} received. Shutting down gracefully...`);
       server.close(async () => {
-        await sequelize.close();
+        try {
+          await sequelize.close();
+        } catch {
+          // Already down; nothing to release.
+        }
         process.exit(0);
       });
+
+      // Do not hang forever if a connection refuses to drain.
+      setTimeout(() => process.exit(0), 10_000).unref();
     };
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
+
+    // Connect to the database in the background, retrying with backoff.
+    void connectDatabase();
   } catch (error) {
-    console.error('Unable to connect to the database:', error);
+    console.error('Failed to start HTTP server:', error);
     process.exit(1);
+  }
+};
+
+/**
+ * Establishes the database connection out of band from HTTP startup, retrying
+ * a few times before leaving the server up in a degraded state. Routes that
+ * need the database will surface their own errors; /health reports the status.
+ */
+const connectDatabase = async (): Promise<void> => {
+  const MAX_ATTEMPTS = 5;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      await sequelize.authenticate();
+      console.log('Database connected successfully.');
+
+      // `alter` inspects and rewrites live tables, which is slow and can lock
+      // them. Never in production — schema changes go through migrations.
+      if (process.env.NODE_ENV !== 'production') {
+        await sequelize.sync({ alter: true });
+      }
+
+      dbStatus = 'connected';
+      startCronJobs();
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Database connection attempt ${attempt}/${MAX_ATTEMPTS} failed: ${message}`);
+
+      if (attempt === MAX_ATTEMPTS) {
+        dbStatus = 'unavailable';
+        console.error(
+          'Giving up on the database. The server stays up so health checks pass, ' +
+            'but any route that reads or writes data will fail until this is resolved.'
+        );
+        return;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 2 ** attempt * 1000));
+    }
   }
 };
 
