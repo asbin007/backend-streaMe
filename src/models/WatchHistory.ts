@@ -47,6 +47,25 @@ export class WatchHistory extends Model {
   })
   posterPath!: string;
 
+  /**
+   * Which episode the viewer was on, for `mediaType: 'tv'`. Null for films.
+   *
+   * Without these, history could say "you watched Breaking Bad" but not where
+   * you were, so "Continue Watching" could only ever link back to the show
+   * page and make the viewer find the episode again.
+   */
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true,
+  })
+  season!: number | null;
+
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: true,
+  })
+  episode!: number | null;
+
   @Column({
     type: DataType.FLOAT,
     defaultValue: 0,

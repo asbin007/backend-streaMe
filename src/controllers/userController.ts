@@ -83,13 +83,22 @@ export class UserController {
 
   static async addToHistory(req: Request, res: Response): Promise<void> {
     try {
-      const { mediaId, mediaType, title, posterPath, progress, duration } = req.body;
+      const { mediaId, mediaType, title, posterPath, progress, duration, season, episode } =
+        req.body;
       const userId = getUserId(req);
 
       if (!mediaId || !mediaType) {
         res.status(400).json({ message: 'Media ID and Type are required' });
         return;
       }
+
+      // Only meaningful for series, and only when they parse as positive ints.
+      const parsePart = (value: unknown): number | null => {
+        const n = Number(value);
+        return Number.isInteger(n) && n > 0 ? n : null;
+      };
+      const seasonNo = mediaType === 'tv' ? parsePart(season) : null;
+      const episodeNo = mediaType === 'tv' ? parsePart(episode) : null;
 
       let history = await WatchHistory.findOne({
         where: { userId, mediaId, mediaType },
@@ -98,6 +107,10 @@ export class UserController {
       if (history) {
         history.progress = progress ?? history.progress;
         history.duration = duration ?? history.duration;
+        // Track the latest episode so the viewer resumes where they stopped,
+        // not at whichever episode they happened to open first.
+        if (seasonNo !== null) history.season = seasonNo;
+        if (episodeNo !== null) history.episode = episodeNo;
         history.lastWatchedAt = new Date();
         await history.save();
       } else {
@@ -107,6 +120,8 @@ export class UserController {
           mediaType,
           title,
           posterPath,
+          season: seasonNo,
+          episode: episodeNo,
           progress: progress || 0,
           duration: duration || 0,
           lastWatchedAt: new Date(),
