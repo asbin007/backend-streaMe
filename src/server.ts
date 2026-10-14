@@ -1,15 +1,27 @@
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
+import pinoHttp from 'pino-http';
+import pino from 'pino';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { validateEnv } from './config/env';
 import { createRateLimiter } from './middleware/rateLimiter';
 import sequelize from './config/database';
+import { initSentry, sentryRequestHandler, sentryErrorHandler } from './config/sentry';
 
 dotenv.config();
 validateEnv();
+initSentry();
+
+// Structured JSON logs in prod (Render/Fly ingest them for free), pretty
+// human-readable in dev. Replaces morgan — same per-request line, with
+// req.id, latency, and no string-concat parsing.
+export const logger = pino(
+  process.env.NODE_ENV === 'production'
+    ? { level: process.env.LOG_LEVEL || 'info' }
+    : { level: 'debug', transport: { target: 'pino-pretty', options: { colorize: true } } }
+);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -104,7 +116,8 @@ app.get('/ready', (req, res) => {
 });
 
 app.use(createRateLimiter());
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use(sentryRequestHandler());
+app.use(pinoHttp({ logger, redact: ['req.headers.authorization', 'req.headers.cookie'] }));
 app.use(cookieParser());
 
 import authRoutes from './routes/authRoutes';
@@ -128,8 +141,12 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
+app.use(sentryErrorHandler());
 app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('Unhandled request error:', error);
+  (req as Request & { log?: { error: (o: unknown, m?: string) => void } }).log?.error(
+    { err: error },
+    'Unhandled request error'
+  ) ?? logger.error({ err: error }, 'Unhandled request error');
   res.status(500).json({ error: 'Internal server error' });
 });
 

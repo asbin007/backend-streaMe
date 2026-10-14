@@ -43,3 +43,7 @@ services:
       # NodeCache. Point at Upstash free tier for a zero-cost upgrade.
       - key: REDIS_URL
         sync: false
+      # Optional. When set, errors + 5xx responses stream to Sentry.
+      # Unset = no Sentry init at all, zero outbound traffic.
+      - key: SENTRY_DSN
+        sync: false
