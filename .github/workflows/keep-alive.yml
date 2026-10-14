@@ -1,0 +1,22 @@
+# Pings /health every 10 minutes to keep the Render free-tier dyno warm.
+# Render spins the service down after 15 minutes idle, giving the next real
+# request a 30-60s cold start; a lightweight self-ping avoids that.
+#
+# GitHub Actions cron schedules can lag a few minutes under load, so 10m is
+# the safe cadence against the 15m spindown.
+name: Keep Render warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit health endpoint
+        run: |
+          curl -fsS --max-time 60 \
+            https://backend-streame.onrender.com/health \
+            || echo "ping failed (will retry on next run)"
