@@ -38,3 +38,8 @@ services:
         sync: false
       - key: MAILGUN_DOMAIN
         sync: false
+      # Optional. When set, cacheService uses Redis (shared across
+      # instances, survives restarts); unset falls back to in-memory
+      # NodeCache. Point at Upstash free tier for a zero-cost upgrade.
+      - key: REDIS_URL
+        sync: false

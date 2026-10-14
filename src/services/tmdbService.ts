@@ -20,7 +20,7 @@ export const tmdbService = {
 
   getContents: async (mediaType: string, filters: any = {}) => {
     const cacheKey = `contents_${mediaType}_${JSON.stringify(filters)}`;
-    const cachedData = cacheService.get(cacheKey);
+    const cachedData = await cacheService.get(cacheKey);
 
     if (cachedData) {
       return cachedData;
@@ -39,7 +39,7 @@ export const tmdbService = {
       // Use discover endpoint for everything as it's the most flexible
       const response = await tmdbApi.get(`/discover/${mediaType}`, { params });
       
-      cacheService.set(cacheKey, response.data);
+      await cacheService.set(cacheKey, response.data);
       return response.data;
     } catch (error) {
       throw error;
